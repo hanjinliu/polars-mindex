@@ -11,17 +11,24 @@ if TYPE_CHECKING:
 
 _L = TypeVar("_L", bound=_lv._Levels)
 
+
 class MultiIndexDataFrame(Generic[_L]):
     def __init__(
         self,
         df: pl.DataFrame,
-        index: MultiIndex,
-        columns: MultiIndex[_L],
+        index: MultiIndex | None = None,
+        columns: MultiIndex[_L] | None = None,
     ):
+        if not isinstance(df, pl.DataFrame):
+            df = pl.DataFrame(df)
         self._df = df
+        if index is None:
+            index = MultiIndex(pl.DataFrame({"level_0": pl.int_range(0, len(df))}))
+        if columns is None:
+            columns = MultiIndex(pl.DataFrame({"level_0": df.columns}))
         self._index = index
         self._columns = columns
-    
+
     def __getitem__(self, key):
         if isinstance(key, str):
             df_new = self._df.select(self._columns.columns_for_name(key))
@@ -36,37 +43,31 @@ class MultiIndexDataFrame(Generic[_L]):
             # NOTE: if key contains slice(None), this never happens
             alias = key if isinstance(key, str) else key[-1]
             return df_new.to_series().alias(alias)
-        df_new = df_new.rename(
-            {c: ".".join(row) for c, row in zip(df_new.columns, columns_new._df.iter_rows())}
-        )
+        df_new = df_new.rename({c: ".".join(row) for c, row in zip(df_new.columns, columns_new._df.iter_rows())})
         return MultiIndexDataFrame(df_new, self.index, columns_new)
 
     def __repr__(self) -> str:
         df = self._df
-        df_renamed = df.rename(
-            {main: "\n".join(col) + "\n" for col, main in zip(self._columns, df.columns)}
-        )
+        df_renamed = df.rename({main: "\n".join(col) + "\n" for col, main in zip(self._columns, df.columns)})
         col_depth = self._columns.nlevels
-        index_renamed = self._index._df.rename(
-            {c: (" " * len(c) + "\n") * col_depth + c for c in self._index.names}
-        )
+        index_renamed = self._index._df.rename({c: (" " * len(c) + "\n") * col_depth + c for c in self._index.names})
         return "[multi-indexed] " + repr(pl.concat([index_renamed, df_renamed], how="horizontal"))
-    
+
     @property
     def df(self) -> pl.DataFrame:
         """The polars dataframe behind this object."""
         return self._df
-    
+
     @property
     def index(self) -> MultiIndex:
         """The hierarchical index."""
         return self._index
-        
+
     @property
     def columns(self) -> MultiIndex:
         """The hierarchical columns."""
         return self._columns
-    
+
     def reset_index(self) -> pl.DataFrame:
         """Reset the index to a regular index."""
         return pl.concat([self._index._df, self._df], how="horizontal")
@@ -76,6 +77,11 @@ class MultiIndexDataFrame(Generic[_L]):
         """The shape of the dataframe."""
         return self._df.shape
 
+    def group_by(self, by, *more_by):
+        from .groupby import GroupBy
+
+        return GroupBy(self._df.group_by(by, *more_by, maintain_order=True))
+
     def mean(
         self,
         axis: Literal[0, 1] = 0,
@@ -83,7 +89,7 @@ class MultiIndexDataFrame(Generic[_L]):
     ) -> MultiIndexDataFrame[_L]:
         if axis == 0:
             return MultiIndexDataFrame(
-                self._df.mean(axis=0, null_strategy=null_strategy), 
+                self._df.mean(axis=0, null_strategy=null_strategy),
                 self._columns,
             )
         elif axis == 1:
@@ -96,5 +102,3 @@ class MultiIndexDataFrame(Generic[_L]):
         ddof: int = 1,
     ) -> MultiIndexDataFrame[_L]:
         return MultiIndexDataFrame(self._df.std(ddof=ddof), self._columns)
-    
-    

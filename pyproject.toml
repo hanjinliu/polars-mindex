@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "polars-mindex"
 dynamic = ["version"]
-description = ''
+description = 'Use MultiIndex in polars.'
 readme = "README.md"
 requires-python = ">=3.8"
 license = "BSD 3-Clause"
@@ -23,7 +23,9 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = []
+dependencies = [
+  "polars",
+]
 
 [project.urls]
 Documentation = "https://github.com/unknown/polars-mindex#readme"
